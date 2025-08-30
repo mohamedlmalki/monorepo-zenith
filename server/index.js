@@ -104,7 +104,7 @@ app.post('/api/apps/:appName/install', async (req, res) => {
   }
 });
 
-// --- NEW ENDPOINTS ---
+// --- UPDATED ENDPOINT ---
 
 app.post('/api/apps/:appName/start', async (req, res) => {
     const { appName } = req.params;
@@ -118,8 +118,13 @@ app.post('/api/apps/:appName/start', async (req, res) => {
         return res.status(404).json({ message: 'App not found.' });
     }
     
-    // We assume the primary workspace is the first one listed
-    const mainWorkspacePath = path.join(MONOREPO_ROOT, appToStart.workspaces[0]);
+    // New logic to find the main workspace path, prioritizing non-backend workspaces.
+    // This makes the app smarter by looking for a frontend-like name.
+    const backendKeywords = ['server', 'backend', 'api', 'services'];
+    const frontendWorkspace = appToStart.workspaces.find(workspace => !backendKeywords.some(keyword => workspace.toLowerCase().includes(keyword)));
+    const mainWorkspacePath = path.join(MONOREPO_ROOT, frontendWorkspace || appToStart.workspaces[0]);
+
+    console.log(`Starting app '${appName}' from workspace: ${mainWorkspacePath}`);
     
     const appProcess = spawn('npm', ['run', 'dev'], { 
         cwd: mainWorkspacePath,
@@ -129,34 +134,43 @@ app.post('/api/apps/:appName/start', async (req, res) => {
 
     runningApps.set(appName, appProcess);
     
-    console.log(`Started app '${appName}' with PID: ${appProcess.pid}`);
-
     let urlFound = false;
-    const frontendUrlRegex = /Local:\s+(https?:\/\/(localhost|127\.0\.0\.1):\d+)/;
-    const fallbackUrlRegex = /(https?:\/\/(localhost|127\.0\.0\.1):\d+)/;
+    let frontendUrl = null;
+    let fallbackUrl = null;
+
+    const urlRegex = /(https?:\/\/(localhost|127\.0\.0\.1):\d+)/;
     
     const processLog = (log) => {
         io.emit('logs', { appName, log });
 
         if (!urlFound) {
-            let match = log.match(frontendUrlRegex);
-            if (match) {
-                const url = match[1];
-                console.log(`Found frontend URL for ${appName}: ${url}`);
-                io.emit('app-url', { appName, url });
-                urlFound = true;
-                return;
-            }
-
-            match = log.match(fallbackUrlRegex);
+            const match = log.match(urlRegex);
             if (match) {
                 const url = match[0];
-                console.log(`Found fallback URL for ${appName}: ${url}`);
-                io.emit('app-url', { appName, url });
-                urlFound = true;
+                if (log.toLowerCase().includes('server')) {
+                    // This is a backend URL, save it as a fallback
+                    if (!fallbackUrl) {
+                        fallbackUrl = url;
+                        console.log(`Found backend URL (fallback) for ${appName}: ${url}`);
+                    }
+                } else {
+                    // This is a frontend URL, use it immediately
+                    frontendUrl = url;
+                    urlFound = true;
+                    console.log(`Found frontend URL for ${appName}: ${url}`);
+                    io.emit('app-url', { appName, url });
+                }
             }
         }
     }
+
+    // A small delay to ensure we give the frontend time to start and log its URL
+    setTimeout(() => {
+        if (!urlFound && fallbackUrl) {
+            console.log(`Using fallback URL for ${appName}: ${fallbackUrl}`);
+            io.emit('app-url', { appName, url: fallbackUrl });
+        }
+    }, 2000); 
 
     appProcess.stdout.on('data', (data) => processLog(data.toString()));
     appProcess.stderr.on('data', (data) => processLog(`ERROR: ${data.toString()}`));

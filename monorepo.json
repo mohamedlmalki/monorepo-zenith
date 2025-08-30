@@ -56,6 +56,13 @@
       "workspaces": [
         "apps/Buttondown"
       ]
+    },
+    {
+      "name": "Zoho-desk-inventory1",
+      "workspaces": [
+        "apps/Zoho-desk-inventory1",
+        "apps/Zoho-desk-inventory1/server"
+      ]
     }
   ]
 }

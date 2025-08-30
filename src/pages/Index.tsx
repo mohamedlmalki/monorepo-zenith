@@ -444,7 +444,7 @@ const DetailsTab: React.FC<{ appDetails: AppDetails | null }> = ({ appDetails })
 
 // --- Dependencies Tab Component ---
 const DependenciesTab: React.FC<{ appName: string; }> = ({ appName }) => {
-  const [dependencies, setDependencies] = useState<Dependency[]>([]);
+  const [dependencies, setDependencies] = useState<any[]>([]);
   const [newDep, setNewDep] = useState('');
   const outdatedCount = dependencies.filter(dep => dep.outdated).length;
   return (
@@ -501,7 +501,12 @@ const Index: React.FC = () => {
     });
 
     socket.on('app-url', ({ appName, url }) => {
-        setAppUrls(prev => ({ ...prev, [appName]: url }));
+        setAppUrls(prev => {
+            if (prev[appName] !== url) {
+                return { ...prev, [appName]: url };
+            }
+            return prev;
+        });
     });
 
     socket.on('app-stopped', ({ appName }) => {
