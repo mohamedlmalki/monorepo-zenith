@@ -1,0 +1,17 @@
+{
+  "apps": [
+    {
+      "name": "Zoho desk inventory",
+      "workspaces": [
+        "apps/Zoho-desk-inventory",
+        "apps/Zoho-desk-inventory/server"
+      ]
+    },
+    {
+      "name": "Zoho Flow",
+      "workspaces": [
+        "apps/Zoho_Flow"
+      ]
+    }
+  ]
+}

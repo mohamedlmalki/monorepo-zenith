@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Monorepo Dashboard Design System - Dark Theme */
+
+@layer base {
+  :root {
+    /* Dashboard Dark Theme Colors */
+    --dashboard-bg: 220 13% 8%;
+    --dashboard-sidebar: 220 13% 10%;
+    --dashboard-panel: 220 13% 12%;
+    --dashboard-border: 220 13% 18%;
+    --dashboard-text: 210 40% 95%;
+    --dashboard-muted: 215 20.2% 65.1%;
+    
+    /* Status Colors */
+    --status-running: 142 76% 36%;
+    --status-stopped: 215 20.2% 65.1%;
+    --status-starting: 45 93% 47%;
+    --status-error: 0 84.2% 60.2%;
+    --status-building: 217.2 91.2% 59.8%;
+    
+    /* Terminal Colors */
+    --terminal-bg: 220 13% 6%;
+    --terminal-border: 220 13% 18%;
+    --terminal-text: 210 40% 95%;
+    --terminal-info: 217.2 91.2% 59.8%;
+    --terminal-warn: 45 93% 47%;
+    --terminal-error: 0 84.2% 60.2%;
+    
+    /* Action Button Colors */
+    --action-success: 142 76% 36%;
+    --action-danger: 0 84.2% 60.2%;
+    --action-primary: 217.2 91.2% 59.8%;
+    --action-muted: 215 20.2% 65.1%;
+
+    /* Default light theme fallback */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark, * {
+    /* Force dark theme for dashboard */
+    --background: var(--dashboard-bg);
+    --foreground: var(--dashboard-text);
+    --card: var(--dashboard-panel);
+    --card-foreground: var(--dashboard-text);
+    --popover: var(--dashboard-panel);
+    --popover-foreground: var(--dashboard-text);
+    --primary: var(--action-primary);
+    --primary-foreground: 220 13% 8%;
+    --secondary: var(--dashboard-panel);
+    --secondary-foreground: var(--dashboard-text);
+    --muted: var(--dashboard-panel);
+    --muted-foreground: var(--dashboard-muted);
+    --accent: var(--dashboard-panel);
+    --accent-foreground: var(--dashboard-text);
+    --destructive: var(--status-error);
+    --destructive-foreground: 210 40% 98%;
+    --border: var(--dashboard-border);
+    --input: var(--dashboard-panel);
+    --ring: var(--action-primary);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  /* Status Indicators */
+  .status-dot {
+    @apply w-2 h-2 rounded-full flex-shrink-0;
+  }
+  
+  .status-running {
+    @apply bg-green-500;
+    background-color: hsl(var(--status-running));
+  }
+  
+  .status-stopped {
+    @apply opacity-50;
+    background-color: hsl(var(--status-stopped));
+  }
+  
+  .status-starting {
+    background-color: hsl(var(--status-starting));
+    animation: pulse 2s infinite;
+  }
+  
+  .status-error {
+    background-color: hsl(var(--status-error));
+  }
+  
+  .status-building {
+    background-color: hsl(var(--status-building));
+    animation: spin 2s linear infinite;
+  }
+  
+  /* Terminal Styling */
+  .terminal-window {
+    background-color: hsl(var(--terminal-bg));
+    border: 1px solid hsl(var(--terminal-border));
+    @apply rounded-md font-mono text-sm;
+  }
+  
+  .terminal-content {
+    @apply p-4 h-96 overflow-y-auto;
+    color: hsl(var(--terminal-text));
+  }
+  
+  .log-info { color: hsl(var(--terminal-info)); }
+  .log-warn { color: hsl(var(--terminal-warn)); }
+  .log-error { color: hsl(var(--terminal-error)); }
+  
+  /* App List Item */
+  .app-item {
+    @apply p-3 rounded-lg border transition-all duration-200 cursor-pointer;
+    background-color: hsl(var(--dashboard-panel));
+    border-color: hsl(var(--dashboard-border));
+  }
+  
+  .app-item:hover {
+    border-color: hsl(var(--action-primary));
+  }
+  
+  .app-item.selected {
+    border-color: hsl(var(--action-primary));
+    background-color: hsl(var(--action-primary) / 0.1);
+  }
+}
