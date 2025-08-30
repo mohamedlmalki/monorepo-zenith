@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { findApps } from './app-discovery.js';
+import { getAppDetails } from './app-details.js';
 import { exec, spawn } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
@@ -129,17 +130,41 @@ app.post('/api/apps/:appName/start', async (req, res) => {
     runningApps.set(appName, appProcess);
     
     console.log(`Started app '${appName}' with PID: ${appProcess.pid}`);
+
+    let urlFound = false;
+    const frontendUrlRegex = /Local:\s+(https?:\/\/(localhost|127\.0\.0\.1):\d+)/;
+    const fallbackUrlRegex = /(https?:\/\/(localhost|127\.0\.0\.1):\d+)/;
     
-    appProcess.stdout.on('data', (data) => {
-      io.emit('logs', { appName, log: data.toString() });
-    });
-    appProcess.stderr.on('data', (data) => {
-      io.emit('logs', { appName, log: `ERROR: ${data.toString()}` });
-    });
+    const processLog = (log) => {
+        io.emit('logs', { appName, log });
+
+        if (!urlFound) {
+            let match = log.match(frontendUrlRegex);
+            if (match) {
+                const url = match[1];
+                console.log(`Found frontend URL for ${appName}: ${url}`);
+                io.emit('app-url', { appName, url });
+                urlFound = true;
+                return;
+            }
+
+            match = log.match(fallbackUrlRegex);
+            if (match) {
+                const url = match[0];
+                console.log(`Found fallback URL for ${appName}: ${url}`);
+                io.emit('app-url', { appName, url });
+                urlFound = true;
+            }
+        }
+    }
+
+    appProcess.stdout.on('data', (data) => processLog(data.toString()));
+    appProcess.stderr.on('data', (data) => processLog(`ERROR: ${data.toString()}`));
     
     appProcess.on('exit', (code) => {
         console.log(`App '${appName}' exited with code ${code}`);
         io.emit('logs', { appName, log: `Process exited with code ${code}` });
+        io.emit('app-stopped', { appName });
         runningApps.delete(appName);
     });
 
@@ -154,9 +179,13 @@ app.post('/api/apps/:appName/stop', (req, res) => {
         return res.status(404).json({ message: 'App is not running.' });
     }
     
-    // Kill the process group to ensure child processes are also terminated
+    // Kill the process
     try {
-        process.kill(-appProcess.pid);
+        if (process.platform === 'win32') {
+            exec(`taskkill /pid ${appProcess.pid} /t /f`);
+        } else {
+            appProcess.kill();
+        }
         runningApps.delete(appName);
         console.log(`Stopped app '${appName}'`);
         res.json({ message: `App '${appName}' stopped successfully.` });
@@ -183,6 +212,24 @@ app.delete('/api/apps/:appName', async (req, res) => {
     } catch (error) {
         console.error('Error updating monorepo.json:', error);
         res.status(500).json({ message: 'Failed to update monorepo configuration.' });
+    }
+});
+
+app.get('/api/apps/:appName/details', async (req, res) => {
+    const { appName } = req.params;
+    const apps = await findApps();
+    const app = apps.find(app => app.name === appName);
+
+    if (!app) {
+        return res.status(404).json({ message: 'App not found' });
+    }
+
+    try {
+        const details = await getAppDetails(app);
+        res.json(details);
+    } catch (error) {
+        console.error(`Error getting details for ${appName}:`, error);
+        res.status(500).json({ message: 'Failed to get app details.' });
     }
 });
 

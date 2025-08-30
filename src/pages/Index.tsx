@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import AnsiToHtml from 'ansi-to-html';
-import { 
-  PlayCircle, 
-  StopCircle, 
-  RotateCw, 
-  Eraser, 
-  Clipboard, 
-  Hammer, 
-  RefreshCw, 
+import {
+  PlayCircle,
+  StopCircle,
+  RotateCw,
+  Eraser,
+  Clipboard,
+  Hammer,
+  RefreshCw,
   ArrowUpCircle,
   Plus,
   AlertTriangle,
@@ -63,18 +63,21 @@ interface App {
   workspaces: string[];
 }
 
-interface Build {
-  id: string;
-  status: 'success' | 'failed' | 'building';
-  duration: string;
-  timestamp: string;
-}
-
-interface Dependency {
-  name: string;
-  version: string;
-  latest?: string;
-  outdated: boolean;
+interface AppDetails {
+  packageJson: {
+    name?: string;
+    version?: string;
+    description?: string;
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+    scripts?: Record<string, string>;
+  };
+  stats: {
+    fileCount: number;
+    totalSize: number;
+    fileTypes: Record<string, number>;
+  };
+  ports: number[];
 }
 
 // --- Status Indicator Component ---
@@ -335,12 +338,13 @@ const AppSidebar: React.FC<{
 const TerminalTab: React.FC<{
   appName: string;
   logs: string[];
+  appUrl?: string;
   onStartApp: () => void;
   onStopApp: () => void;
   onRestartApp: () => void;
   onClearLogs: () => void;
   onCopyLogs: () => void;
-}> = ({ appName, logs, onStartApp, onStopApp, onRestartApp, onClearLogs, onCopyLogs }) => {
+}> = ({ appName, logs, appUrl, onStartApp, onStopApp, onRestartApp, onClearLogs, onCopyLogs }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const ansiToHtml = new AnsiToHtml();
 
@@ -361,6 +365,20 @@ const TerminalTab: React.FC<{
         <Button onClick={onCopyLogs} variant="outline" size="sm"><Clipboard className="w-4 h-4 mr-2" />Copy Logs</Button>
       </div>
       
+      {appUrl && (
+        <div className="p-2 border border-dashboard-border rounded-md bg-dashboard-panel text-sm flex items-center gap-2">
+          <span className="text-dashboard-muted">Running at:</span>
+          <a
+            href={appUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-action-primary hover:underline font-medium"
+          >
+            {appUrl}
+          </a>
+        </div>
+      )}
+
       <div className="terminal-window">
         <div className="bg-dashboard-border p-2 rounded-t-md">
           <div className="flex items-center gap-2">
@@ -382,13 +400,44 @@ const TerminalTab: React.FC<{
   );
 };
 
-// --- Builds Tab Component ---
-const BuildsTab: React.FC<{ appName: string; onRunBuild: () => void; }> = ({ appName, onRunBuild }) => {
-  const [builds, setBuilds] = useState<Build[]>([{ id: '1', status: 'success', duration: '2m 34s', timestamp: '2024-01-15 14:30' },{ id: '2', status: 'failed', duration: '1m 12s', timestamp: '2024-01-15 12:15' },{ id: '3', status: 'success', duration: '3m 01s', timestamp: '2024-01-15 10:45' }]);
+// --- Details Tab Component ---
+const DetailsTab: React.FC<{ appDetails: AppDetails | null }> = ({ appDetails }) => {
+  if (!appDetails) {
+    return (
+      <div className="p-6">
+        <Loader2 className="animate-spin" />
+      </div>
+    );
+  }
+
+  const { packageJson, stats, ports } = appDetails;
+
+  const techStack = [
+    { name: 'React', dep: 'react' },
+    { name: 'Vite', dep: 'vite' },
+    { name: 'TypeScript', dep: 'typescript' },
+    { name: 'Tailwind CSS', dep: 'tailwindcss' },
+  ].filter(tech => packageJson.dependencies?.[tech.dep] || packageJson.devDependencies?.[tech.dep]);
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center gap-4"><Button onClick={onRunBuild} className="bg-action-primary hover:bg-action-primary/80"><Hammer className="w-4 h-4 mr-2" />Run Build</Button><div className="text-dashboard-muted">Last build: <span className="text-action-success">Successful</span></div></div>
-      <Card className="bg-dashboard-panel border-dashboard-border"><div className="p-4"><h3 className="font-semibold text-dashboard-text mb-4">Build History</h3><div className="space-y-3">{builds.map((build) => (<div key={build.id} className="flex items-center justify-between p-3 rounded-lg border border-dashboard-border"><div className="flex items-center gap-3">{build.status === 'success' && <CheckCircle className="w-4 h-4 text-action-success" />}{build.status === 'failed' && <AlertTriangle className="w-4 h-4 text-status-error" />}{build.status === 'building' && <Loader2 className="w-4 h-4 text-action-primary animate-spin" />}<div><div className="text-dashboard-text capitalize">{build.status}</div><div className="text-sm text-dashboard-muted">{build.timestamp}</div></div></div><div className="text-dashboard-muted flex items-center gap-2"><Clock className="w-4 h-4" />{build.duration}</div></div>))}</div></div></Card>
+      <Card className="bg-dashboard-panel border-dashboard-border p-4">
+        <h3 className="font-semibold text-dashboard-text mb-4">Details</h3>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div><span className="text-dashboard-muted">Version:</span> {packageJson.version || 'N/A'}</div>
+          <div><span className="text-dashboard-muted">File Count:</span> {stats.fileCount}</div>
+          <div><span className="text-dashboard-muted">Total Size:</span> {(stats.totalSize / 1024).toFixed(2)} KB</div>
+          {ports.length > 0 && <div><span className="text-dashboard-muted">Detected Ports:</span> {ports.join(', ')}</div>}
+        </div>
+        {techStack.length > 0 && (
+          <div className="mt-4">
+            <h4 className="font-semibold text-dashboard-text mb-2">Technology Stack</h4>
+            <div className="flex gap-2">
+              {techStack.map(tech => <Badge key={tech.name} variant="secondary">{tech.name}</Badge>)}
+            </div>
+          </div>
+        )}
+      </Card>
     </div>
   );
 };
@@ -412,6 +461,9 @@ const Index: React.FC = () => {
   const [apps, setApps] = useState<App[]>([]);
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, string[]>>({});
+  const [appUrls, setAppUrls] = useState<Record<string, string>>({});
+  const [appDetails, setAppDetails] = useState<Record<string, AppDetails>>({});
+  const [activeTab, setActiveTab] = useState('terminal');
   const { toast } = useToast();
 
   const fetchApps = useCallback(async () => {
@@ -448,10 +500,40 @@ const Index: React.FC = () => {
       setLogs(prev => ({ ...prev, [appName]: [...(prev[appName] || []), log] }));
     });
 
+    socket.on('app-url', ({ appName, url }) => {
+        setAppUrls(prev => ({ ...prev, [appName]: url }));
+    });
+
+    socket.on('app-stopped', ({ appName }) => {
+        setAppUrls(prev => {
+            const newUrls = { ...prev };
+            delete newUrls[appName];
+            return newUrls;
+        });
+    });
+
     return () => {
       socket.disconnect();
     };
   }, [fetchApps]);
+
+  useEffect(() => {
+    const fetchDetails = async () => {
+      if (selectedApp && activeTab === 'details' && !appDetails[selectedApp]) {
+        try {
+          const response = await fetch(`http://localhost:2999/api/apps/${selectedApp}/details`);
+          if (!response.ok) throw new Error('Failed to fetch app details');
+          const details = await response.json();
+          setAppDetails(prev => ({ ...prev, [selectedApp]: details }));
+        } catch (error) {
+          console.error('Failed to fetch app details:', error);
+          toast({ title: 'Error', description: 'Could not fetch app details.', variant: 'destructive' });
+        }
+      }
+    };
+    fetchDetails();
+  }, [selectedApp, activeTab, appDetails, toast]);
+
 
   const startApp = async (appName: string) => {
     setApps(prev => prev.map(app => app.name === appName ? { ...app, status: 'starting' } : app));
@@ -473,6 +555,11 @@ const Index: React.FC = () => {
       const response = await fetch(`http://localhost:2999/api/apps/${appName}/stop`, { method: 'POST' });
       if (!response.ok) throw new Error('Failed to stop app on the server.');
       toast({ title: 'Success', description: `${appName} has been stopped.` });
+      setAppUrls(prev => {
+          const newUrls = { ...prev };
+          delete newUrls[appName];
+          return newUrls;
+      });
     } catch (error) {
       toast({ title: 'Error Stopping App', description: (error as Error).message, variant: 'destructive' });
     } finally {
@@ -485,8 +572,6 @@ const Index: React.FC = () => {
     await stopApp(selectedApp);
     setTimeout(() => startApp(selectedApp), 1000); // Give a moment for the process to die
   };
-
-  const runBuild = async (appName: string) => { /* ... existing code ... */ };
 
   const installApp = async (appName: string) => {
     setApps(prev => prev.map(app => app.name === appName ? { ...app, status: 'installing' } : app));
@@ -543,10 +628,10 @@ const Index: React.FC = () => {
         {selectedApp ? (
           <div className="p-6 flex-1">
             <div className="mb-6"><h1 className="text-2xl font-bold text-dashboard-text">{selectedApp}</h1><p className="text-dashboard-muted">Manage and monitor your application</p></div>
-            <Tabs defaultValue="terminal" className="flex-1">
-              <TabsList className="grid w-full grid-cols-3 bg-dashboard-panel border border-dashboard-border"><TabsTrigger value="terminal" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Terminal</TabsTrigger><TabsTrigger value="builds" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Builds</TabsTrigger><TabsTrigger value="dependencies" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Dependencies</TabsTrigger></TabsList>
-              <TabsContent value="terminal"><TerminalTab appName={selectedApp} logs={logs[selectedApp] || []} onStartApp={() => startApp(selectedApp)} onStopApp={() => stopApp(selectedApp)} onRestartApp={() => restartApp(selectedApp)} onClearLogs={clearLogs} onCopyLogs={copyLogs} /></TabsContent>
-              <TabsContent value="builds"><BuildsTab appName={selectedApp} onRunBuild={() => runBuild(selectedApp)} /></TabsContent>
+            <Tabs defaultValue="terminal" onValueChange={setActiveTab} className="flex-1">
+              <TabsList className="grid w-full grid-cols-3 bg-dashboard-panel border border-dashboard-border"><TabsTrigger value="terminal" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Terminal</TabsTrigger><TabsTrigger value="details" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Details</TabsTrigger><TabsTrigger value="dependencies" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Dependencies</TabsTrigger></TabsList>
+              <TabsContent value="terminal"><TerminalTab appName={selectedApp} logs={logs[selectedApp] || []} appUrl={appUrls[selectedApp]} onStartApp={() => startApp(selectedApp)} onStopApp={() => stopApp(selectedApp)} onRestartApp={() => restartApp(selectedApp)} onClearLogs={clearLogs} onCopyLogs={copyLogs} /></TabsContent>
+              <TabsContent value="details"><DetailsTab appDetails={appDetails[selectedApp]} /></TabsContent>
               <TabsContent value="dependencies"><DependenciesTab appName={selectedApp} /></TabsContent>
             </Tabs>
           </div>
