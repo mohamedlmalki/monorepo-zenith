@@ -11,12 +11,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:8080", // Or your frontend's origin
+    origin: "http://localhost:8079", // Or your frontend's origin
     methods: ["GET", "POST"]
   }
 });
 
-const port = 3001;
+const port = 2999;
 
 const MONOREPO_ROOT = path.resolve(process.cwd(), '..');
 const MONOREPO_CONFIG_PATH = path.join(MONOREPO_ROOT, 'monorepo.json');

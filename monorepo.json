@@ -12,6 +12,50 @@
       "workspaces": [
         "apps/Zoho_Flow"
       ]
+    },
+    {
+      "name": "Zoho Desk",
+      "workspaces": [
+        "apps/zoho-desk",
+        "apps/zoho-desk/server"
+      ]
+    },
+    {
+      "name": "Zoho CRM",
+      "workspaces": [
+        "apps/Zoho-crm"
+      ]
+    },
+    {
+      "name": "WIX",
+      "workspaces": [
+        "apps/WIX"
+      ]
+    },
+    {
+      "name": "Jetform",
+      "workspaces": [
+        "apps/Jetform"
+      ]
+    },
+    {
+      "name": "Directus",
+      "workspaces": [
+        "apps/Directus"
+      ]
+    },
+    {
+      "name": "Clerk",
+      "workspaces": [
+        "apps/Clerk",
+        "apps/Clerk/backend"
+      ]
+    },
+    {
+      "name": "Buttondown",
+      "workspaces": [
+        "apps/Buttondown"
+      ]
     }
   ]
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import AnsiToHtml from 'ansi-to-html';
 import { 
   PlayCircle, 
   StopCircle, 
@@ -135,7 +136,7 @@ const AddAppDialog: React.FC<{ onAppAdded: () => void }> = ({ onAppAdded }) => {
         }
 
         try {
-            const response = await fetch('http://localhost:3001/api/apps', {
+            const response = await fetch('http://localhost:2999/api/apps', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: trimmedAppName, workspaces: finalWorkspaces }),
@@ -341,19 +342,13 @@ const TerminalTab: React.FC<{
   onCopyLogs: () => void;
 }> = ({ appName, logs, onStartApp, onStopApp, onRestartApp, onClearLogs, onCopyLogs }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
+  const ansiToHtml = new AnsiToHtml();
 
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
   }, [logs]);
-
-  const formatLog = (log: string) => {
-    if (log.includes('ERROR') || log.includes('error')) return 'log-error';
-    if (log.includes('WARN') || log.includes('warn')) return 'log-warn';
-    if (log.includes('INFO') || log.includes('info')) return 'log-info';
-    return '';
-  };
 
   return (
     <div className="p-6 space-y-4">
@@ -374,7 +369,13 @@ const TerminalTab: React.FC<{
           </div>
         </div>
         <div ref={terminalRef} className="terminal-content">
-          {logs.length === 0 ? (<div className="text-dashboard-muted">No logs available<br />Start the application to see logs</div>) : (logs.map((log, index) => (<div key={index} className={`mb-1 ${formatLog(log)}`}>{log}</div>)))}
+          {logs.length === 0 ? (
+            <div className="text-dashboard-muted">No logs available<br />Start the application to see logs</div>
+          ) : (
+            logs.map((log, index) => (
+              <div key={index} dangerouslySetInnerHTML={{ __html: ansiToHtml.toHtml(log) }} />
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -415,7 +416,7 @@ const Index: React.FC = () => {
 
   const fetchApps = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/apps');
+      const response = await fetch('http://localhost:2999/api/apps');
       if (!response.ok) throw new Error('Failed to fetch apps');
       
       const fetchedApps: App[] = await response.json();
@@ -442,7 +443,7 @@ const Index: React.FC = () => {
 
   useEffect(() => {
     fetchApps();
-    const socket = io('http://localhost:3001');
+    const socket = io('http://localhost:2999');
     socket.on('logs', ({ appName, log }) => {
       setLogs(prev => ({ ...prev, [appName]: [...(prev[appName] || []), log] }));
     });
@@ -456,7 +457,7 @@ const Index: React.FC = () => {
     setApps(prev => prev.map(app => app.name === appName ? { ...app, status: 'starting' } : app));
     toast({ title: 'Starting App', description: `Starting ${appName}...` });
     try {
-      const response = await fetch(`http://localhost:3001/api/apps/${appName}/start`, { method: 'POST' });
+      const response = await fetch(`http://localhost:2999/api/apps/${appName}/start`, { method: 'POST' });
       if (!response.ok) throw new Error('Failed to start app on the server.');
       toast({ title: 'Success', description: `${appName} has started.` });
     } catch (error) {
@@ -469,7 +470,7 @@ const Index: React.FC = () => {
   const stopApp = async (appName: string) => {
     toast({ title: 'Stopping App', description: `Stopping ${appName}...` });
     try {
-      const response = await fetch(`http://localhost:3001/api/apps/${appName}/stop`, { method: 'POST' });
+      const response = await fetch(`http://localhost:2999/api/apps/${appName}/stop`, { method: 'POST' });
       if (!response.ok) throw new Error('Failed to stop app on the server.');
       toast({ title: 'Success', description: `${appName} has been stopped.` });
     } catch (error) {
@@ -491,7 +492,7 @@ const Index: React.FC = () => {
     setApps(prev => prev.map(app => app.name === appName ? { ...app, status: 'installing' } : app));
     toast({ title: 'Installation Started', description: `Installing dependencies for ${appName}...` });
     try {
-        const response = await fetch(`http://localhost:3001/api/apps/${appName}/install`, { method: 'POST' });
+        const response = await fetch(`http://localhost:2999/api/apps/${appName}/install`, { method: 'POST' });
         if (!response.ok) throw new Error('Installation failed on the server.');
         
         toast({ title: 'Installation Successful', description: `Dependencies for ${appName} are installed.` });
@@ -505,7 +506,7 @@ const Index: React.FC = () => {
   const deleteApp = async (appName: string) => {
     toast({ title: 'Deleting App', description: `Removing ${appName} from configuration...` });
     try {
-      const response = await fetch(`http://localhost:3001/api/apps/${appName}`, { method: 'DELETE' });
+      const response = await fetch(`http://localhost:2999/api/apps/${appName}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Failed to delete app on the server.');
       
       toast({ title: 'Success', description: `App '${appName}' has been removed.` });
@@ -544,7 +545,7 @@ const Index: React.FC = () => {
             <div className="mb-6"><h1 className="text-2xl font-bold text-dashboard-text">{selectedApp}</h1><p className="text-dashboard-muted">Manage and monitor your application</p></div>
             <Tabs defaultValue="terminal" className="flex-1">
               <TabsList className="grid w-full grid-cols-3 bg-dashboard-panel border border-dashboard-border"><TabsTrigger value="terminal" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Terminal</TabsTrigger><TabsTrigger value="builds" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Builds</TabsTrigger><TabsTrigger value="dependencies" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Dependencies</TabsTrigger></TabsList>
-              <TabsContent value="terminal"><TerminalTab appName={selectedApp} logs={logs[selectedApp] || ['Welcome to the terminal', 'Start the application to see logs']} onStartApp={() => startApp(selectedApp)} onStopApp={() => stopApp(selectedApp)} onRestartApp={() => restartApp(selectedApp)} onClearLogs={clearLogs} onCopyLogs={copyLogs} /></TabsContent>
+              <TabsContent value="terminal"><TerminalTab appName={selectedApp} logs={logs[selectedApp] || []} onStartApp={() => startApp(selectedApp)} onStopApp={() => stopApp(selectedApp)} onRestartApp={() => restartApp(selectedApp)} onClearLogs={clearLogs} onCopyLogs={copyLogs} /></TabsContent>
               <TabsContent value="builds"><BuildsTab appName={selectedApp} onRunBuild={() => runBuild(selectedApp)} /></TabsContent>
               <TabsContent value="dependencies"><DependenciesTab appName={selectedApp} /></TabsContent>
             </Tabs>
