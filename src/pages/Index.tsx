@@ -541,12 +541,16 @@ const Index: React.FC = () => {
 
 
   const startApp = async (appName: string) => {
+    setAppUrls(prev => {
+      const newUrls = { ...prev };
+      delete newUrls[appName];
+      return newUrls;
+    });
     setApps(prev => prev.map(app => app.name === appName ? { ...app, status: 'starting' } : app));
     toast({ title: 'Starting App', description: `Starting ${appName}...` });
     try {
       const response = await fetch(`http://localhost:2999/api/apps/${appName}/start`, { method: 'POST' });
       if (!response.ok) throw new Error('Failed to start app on the server.');
-      toast({ title: 'Success', description: `${appName} has started.` });
     } catch (error) {
       toast({ title: 'Error Starting App', description: (error as Error).message, variant: 'destructive' });
     } finally {
@@ -649,3 +653,4 @@ const Index: React.FC = () => {
 };
 
 export default Index;
+

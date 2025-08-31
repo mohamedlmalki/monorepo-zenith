@@ -104,8 +104,6 @@ app.post('/api/apps/:appName/install', async (req, res) => {
   }
 });
 
-// --- UPDATED ENDPOINT ---
-
 app.post('/api/apps/:appName/start', async (req, res) => {
     const { appName } = req.params;
     if (runningApps.has(appName)) {
@@ -118,8 +116,6 @@ app.post('/api/apps/:appName/start', async (req, res) => {
         return res.status(404).json({ message: 'App not found.' });
     }
     
-    // New logic to find the main workspace path, prioritizing non-backend workspaces.
-    // This makes the app smarter by looking for a frontend-like name.
     const backendKeywords = ['server', 'backend', 'api', 'services'];
     const frontendWorkspace = appToStart.workspaces.find(workspace => !backendKeywords.some(keyword => workspace.toLowerCase().includes(keyword)));
     const mainWorkspacePath = path.join(MONOREPO_ROOT, frontendWorkspace || appToStart.workspaces[0]);
@@ -135,47 +131,57 @@ app.post('/api/apps/:appName/start', async (req, res) => {
     runningApps.set(appName, appProcess);
     
     let urlFound = false;
-    let frontendUrl = null;
-    let fallbackUrl = null;
+    let stdoutBuffer = '';
 
-    const urlRegex = /(https?:\/\/(localhost|127\.0\.0\.1):\d+)/;
+    const urlRegex = /(https?:\/\/[^\s]+)/;
+    // A safer regex for stripping ANSI escape codes (specifically color and style codes)
+    const ansiRegex = /\x1b\[[0-9;]*m/g;
+
+    const processLogLine = (line) => {
+        io.emit('logs', { appName, log: line });
+
+        if (urlFound) return;
+        
+        const match = line.match(urlRegex);
+        if (!match) return; // No URL on this line, skip.
+
+        const rawUrl = match[0];
+        const cleanUrl = rawUrl.replace(ansiRegex, '').trim().replace(/\/$/, ''); // Clean and remove trailing slash
+
+        // Highest priority: Vite's "Local" URL
+        if (line.includes('[dev:client]') && line.includes('Local:')) {
+            urlFound = true;
+            console.log(`[dev:server] Found primary frontend URL for ${appName}: ${cleanUrl}`);
+            io.emit('app-url', { appName, url: cleanUrl });
+            return;
+        }
+
+        // Ignore backend URLs
+        if (line.includes('[dev:server]')) {
+            console.log(`[dev:server] Ignoring potential backend URL: ${cleanUrl}`);
+            return;
+        }
+
+        // General fallback for any other URL that isn't from the backend
+        urlFound = true;
+        console.log(`[dev:server] Found general URL for ${appName}: ${cleanUrl}`);
+        io.emit('app-url', { appName, url: cleanUrl });
+    };
+
+    const processDataChunk = (data) => {
+        stdoutBuffer += data.toString();
+        let lines = stdoutBuffer.split('\n');
+        stdoutBuffer = lines.pop() || '';
+        lines.forEach(line => processLogLine(line));
+    };
     
-    const processLog = (log) => {
-        io.emit('logs', { appName, log });
-
-        if (!urlFound) {
-            const match = log.match(urlRegex);
-            if (match) {
-                const url = match[0];
-                if (log.toLowerCase().includes('server')) {
-                    // This is a backend URL, save it as a fallback
-                    if (!fallbackUrl) {
-                        fallbackUrl = url;
-                        console.log(`Found backend URL (fallback) for ${appName}: ${url}`);
-                    }
-                } else {
-                    // This is a frontend URL, use it immediately
-                    frontendUrl = url;
-                    urlFound = true;
-                    console.log(`Found frontend URL for ${appName}: ${url}`);
-                    io.emit('app-url', { appName, url });
-                }
-            }
-        }
-    }
-
-    // A small delay to ensure we give the frontend time to start and log its URL
-    setTimeout(() => {
-        if (!urlFound && fallbackUrl) {
-            console.log(`Using fallback URL for ${appName}: ${fallbackUrl}`);
-            io.emit('app-url', { appName, url: fallbackUrl });
-        }
-    }, 2000); 
-
-    appProcess.stdout.on('data', (data) => processLog(data.toString()));
-    appProcess.stderr.on('data', (data) => processLog(`ERROR: ${data.toString()}`));
+    appProcess.stdout.on('data', processDataChunk);
+    appProcess.stderr.on('data', processDataChunk);
     
     appProcess.on('exit', (code) => {
+        if (stdoutBuffer) {
+            processLogLine(stdoutBuffer);
+        }
         console.log(`App '${appName}' exited with code ${code}`);
         io.emit('logs', { appName, log: `Process exited with code ${code}` });
         io.emit('app-stopped', { appName });
@@ -193,7 +199,6 @@ app.post('/api/apps/:appName/stop', (req, res) => {
         return res.status(404).json({ message: 'App is not running.' });
     }
     
-    // Kill the process
     try {
         if (process.platform === 'win32') {
             exec(`taskkill /pid ${appProcess.pid} /t /f`);
@@ -251,3 +256,4 @@ app.get('/api/apps/:appName/details', async (req, res) => {
 server.listen(port, () => {
   console.log(`Backend server listening on http://localhost:${port}`);
 });
+

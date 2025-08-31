@@ -14,13 +14,6 @@
       ]
     },
     {
-      "name": "Zoho Desk",
-      "workspaces": [
-        "apps/zoho-desk",
-        "apps/zoho-desk/server"
-      ]
-    },
-    {
       "name": "Zoho CRM",
       "workspaces": [
         "apps/Zoho-crm"
@@ -55,13 +48,6 @@
       "name": "Buttondown",
       "workspaces": [
         "apps/Buttondown"
-      ]
-    },
-    {
-      "name": "Zoho-desk-inventory1",
-      "workspaces": [
-        "apps/Zoho-desk-inventory1",
-        "apps/Zoho-desk-inventory1/server"
       ]
     }
   ]
