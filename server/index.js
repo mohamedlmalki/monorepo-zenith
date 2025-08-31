@@ -7,6 +7,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { Server } from 'socket.io';
 import http from 'http';
+import { createProxyMiddleware } from 'http-proxy-middleware';
+
 
 const app = express();
 const server = http.createServer(app);
@@ -37,9 +39,13 @@ app.get('/api/apps', async (req, res) => {
   // Add the running status to the app list
   const appsWithStatus = apps.map(app => {
     const runningProcess = runningApps.get(app.name);
+    let status = 'stopped';
+    if (runningProcess) {
+        status = runningProcess.status || 'running';
+    }
     return {
       ...app,
-      status: runningProcess ? 'running' : 'stopped',
+      status,
     }
   });
   res.json(appsWithStatus);
@@ -123,34 +129,94 @@ app.post('/api/apps/:appName/start', async (req, res) => {
     const mainWorkspacePath = path.join(MONOREPO_ROOT, frontendWorkspace || appToStart.workspaces[0]);
 
     console.log(`Starting app '${appName}' from workspace: ${mainWorkspacePath}`);
+    io.emit('app-starting', { appName });
+
+    // Create a proxy for the app
+    const proxyPort = 4000 + runningApps.size;
+    const proxy = createProxyMiddleware({
+        target: 'http://localhost', // a placeholder, will be overridden by router
+        router: (req) => {
+            const url = new URL(req.url, `http://${req.headers.host}`);
+            return url.origin;
+        },
+        changeOrigin: true,
+        selfHandleResponse: true,
+        onProxyReq: (proxyReq, req, res) => {
+            let body = '';
+            req.on('data', (chunk) => body += chunk);
+            req.on('end', () => {
+                io.emit('network-request', {
+                    appName,
+                    request: {
+                        id: proxyReq.getHeader('x-request-id'),
+                        method: req.method,
+                        url: req.url,
+                        headers: req.headers,
+                        body: body,
+                        timestamp: Date.now(),
+                    },
+                });
+            });
+        },
+        onProxyRes: (proxyRes, req, res) => {
+          let body = [];
+          proxyRes.on('data', chunk => body.push(chunk));
+          proxyRes.on('end', () => {
+            const bodyBuffer = Buffer.concat(body);
+            io.emit('network-response', {
+              appName,
+              response: {
+                id: req.headers['x-request-id'],
+                status: proxyRes.statusCode,
+                headers: proxyRes.headers,
+                body: bodyBuffer.toString('utf8'),
+                timestamp: Date.now(),
+              },
+            });
+            res.end(bodyBuffer);
+          });
+        }
+    });
+
+    const proxyApp = express();
+    proxyApp.use((req, res, next) => {
+      req.headers['x-request-id'] = Math.random().toString(36).substring(7);
+      next();
+    }, proxy);
+    const proxyServer = proxyApp.listen(proxyPort);
     
     const appProcess = spawn('npm', ['run', 'dev'], { 
         cwd: mainWorkspacePath,
         shell: true,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        env: { ...process.env, HTTP_PROXY: `http://localhost:${proxyPort}` }
     });
 
-    runningApps.set(appName, appProcess);
+    runningApps.set(appName, { process: appProcess, status: 'starting', proxyServer, startTime: Date.now() });
     
     let urlFound = false;
     let stdoutBuffer = '';
 
     const urlRegex = /(https?:\/\/[^\s]+)/;
-    // A safer regex for stripping ANSI escape codes (specifically color and style codes)
     const ansiRegex = /\x1b\[[0-9;]*m/g;
 
     const processLogLine = (line) => {
         io.emit('logs', { appName, log: line });
+        const runningApp = runningApps.get(appName);
+        if (runningApp && runningApp.status === 'starting') {
+            runningApp.status = 'running';
+            io.emit('app-running', { appName });
+        }
+
 
         if (urlFound) return;
         
         const match = line.match(urlRegex);
-        if (!match) return; // No URL on this line, skip.
+        if (!match) return;
 
         const rawUrl = match[0];
-        const cleanUrl = rawUrl.replace(ansiRegex, '').trim().replace(/\/$/, ''); // Clean and remove trailing slash
+        const cleanUrl = rawUrl.replace(ansiRegex, '').trim().replace(/\/$/, '');
 
-        // Highest priority: Vite's "Local" URL
         if (line.includes('[dev:client]') && line.includes('Local:')) {
             urlFound = true;
             console.log(`[dev:server] Found primary frontend URL for ${appName}: ${cleanUrl}`);
@@ -158,13 +224,11 @@ app.post('/api/apps/:appName/start', async (req, res) => {
             return;
         }
 
-        // Ignore backend URLs
         if (line.includes('[dev:server]')) {
             console.log(`[dev:server] Ignoring potential backend URL: ${cleanUrl}`);
             return;
         }
 
-        // General fallback for any other URL that isn't from the backend
         urlFound = true;
         console.log(`[dev:server] Found general URL for ${appName}: ${cleanUrl}`);
         io.emit('app-url', { appName, url: cleanUrl });
@@ -195,19 +259,34 @@ app.post('/api/apps/:appName/start', async (req, res) => {
 
 app.post('/api/apps/:appName/stop', (req, res) => {
     const { appName } = req.params;
-    const appProcess = runningApps.get(appName);
+    const appData = runningApps.get(appName);
 
-    if (!appProcess) {
+    if (!appData) {
         return res.status(404).json({ message: 'App is not running.' });
     }
     
+    io.emit('app-stopping', { appName });
+    appData.status = 'stopping';
+
     try {
         if (process.platform === 'win32') {
-            exec(`taskkill /pid ${appProcess.pid} /t /f`);
+            exec(`taskkill /pid ${appData.process.pid} /t /f`, (error) => {
+              if (error) {
+                console.error(`taskkill error: ${error}`);
+              }
+              runningApps.delete(appName);
+              io.emit('app-stopped', { appName });
+            });
         } else {
-            appProcess.kill();
+            appData.process.kill('SIGTERM', (error) => {
+              if (error) {
+                console.error(`kill error: ${error}`);
+              }
+              runningApps.delete(appName);
+              io.emit('app-stopped', { appName });
+            });
         }
-        runningApps.delete(appName);
+        
         console.log(`Stopped app '${appName}'`);
         res.json({ message: `App '${appName}' stopped successfully.` });
     } catch (error) {
@@ -254,6 +333,35 @@ app.get('/api/apps/:appName/details', async (req, res) => {
     }
 });
 
+app.post('/api/apps/lint/all', async (req, res) => {
+    const apps = await findApps();
+    io.emit('linter-output', { log: 'Starting linter for all applications...' });
+
+    const lintPromises = apps.map(app => {
+        return new Promise((resolve) => {
+            const workspacePromises = app.workspaces.map(workspacePath => {
+                return new Promise(resolveWorkspace => {
+                    const fullPath = path.join(MONOREPO_ROOT, workspacePath);
+                    io.emit('linter-output', { log: `\n--- Linting ${app.name} in ${workspacePath} ---` });
+                    exec('npm run lint', { cwd: fullPath }, (error, stdout, stderr) => {
+                        if (error) {
+                            io.emit('linter-output', { log: `Error in ${app.name}: \n${stderr}` });
+                        }
+                        io.emit('linter-output', { log: stdout });
+                        resolveWorkspace();
+                    });
+                });
+            });
+            Promise.all(workspacePromises).then(resolve);
+        });
+    });
+
+    Promise.all(lintPromises).then(() => {
+        io.emit('linter-output', { log: '\n--- Linting complete for all applications. ---' });
+    });
+
+    res.json({ message: 'Linting process started for all applications.' });
+});
 
 server.listen(port, () => {
   console.log(`Backend server listening on http://localhost:${port}`);
