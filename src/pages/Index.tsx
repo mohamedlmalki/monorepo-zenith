@@ -517,6 +517,10 @@ const Index: React.FC = () => {
         });
     });
 
+    socket.on('installation-complete', ({ appName, success }) => {
+        setApps(prev => prev.map(app => app.name === appName ? { ...app, status: success ? 'stopped' : 'error', isInstalled: success } : app));
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -592,8 +596,6 @@ const Index: React.FC = () => {
         toast({ title: 'Installation Successful', description: `Dependencies for ${appName} are installed.` });
     } catch (error) {
         toast({ title: 'Installation Failed', description: (error as Error).message, variant: 'destructive' });
-    } finally {
-        fetchApps(); // Refresh app list to show new status
     }
   };
 
@@ -653,4 +655,3 @@ const Index: React.FC = () => {
 };
 
 export default Index;
-

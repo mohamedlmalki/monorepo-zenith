@@ -88,6 +88,7 @@ app.post('/api/apps/:appName/install', async (req, res) => {
       exec('npm install', { cwd: fullPath }, (error, stdout, stderr) => {
         if (error) {
           console.error(`exec error in ${workspacePath}: ${error}`);
+          io.emit('installation-complete', { appName, success: false });
           return reject(new Error(`Installation failed in ${workspacePath}: ${stderr}`));
         }
         console.log(`Installation successful for ${workspacePath}.`);
@@ -98,6 +99,7 @@ app.post('/api/apps/:appName/install', async (req, res) => {
 
   try {
     await Promise.all(installPromises);
+    io.emit('installation-complete', { appName, success: true });
     res.json({ message: `Dependencies for ${appName} installed successfully in all workspaces.` });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -256,4 +258,3 @@ app.get('/api/apps/:appName/details', async (req, res) => {
 server.listen(port, () => {
   console.log(`Backend server listening on http://localhost:${port}`);
 });
-
