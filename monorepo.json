@@ -1,7 +1,7 @@
 {
   "apps": [
     {
-      "name": "Zoho desk inventory",
+      "name": "Desk Inventory",
       "workspaces": [
         "apps/Zoho-desk-inventory",
         "apps/Zoho-desk-inventory/server"
@@ -20,7 +20,7 @@
       ]
     },
     {
-      "name": "WIX",
+      "name": "WIX Velo",
       "workspaces": [
         "apps/WIX"
       ]
