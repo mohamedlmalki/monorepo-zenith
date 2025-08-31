@@ -333,36 +333,6 @@ app.get('/api/apps/:appName/details', async (req, res) => {
     }
 });
 
-app.post('/api/apps/lint/all', async (req, res) => {
-    const apps = await findApps();
-    io.emit('linter-output', { log: 'Starting linter for all applications...' });
-
-    const lintPromises = apps.map(app => {
-        return new Promise((resolve) => {
-            const workspacePromises = app.workspaces.map(workspacePath => {
-                return new Promise(resolveWorkspace => {
-                    const fullPath = path.join(MONOREPO_ROOT, workspacePath);
-                    io.emit('linter-output', { log: `\n--- Linting ${app.name} in ${workspacePath} ---` });
-                    exec('npm run lint', { cwd: fullPath }, (error, stdout, stderr) => {
-                        if (error) {
-                            io.emit('linter-output', { log: `Error in ${app.name}: \n${stderr}` });
-                        }
-                        io.emit('linter-output', { log: stdout });
-                        resolveWorkspace();
-                    });
-                });
-            });
-            Promise.all(workspacePromises).then(resolve);
-        });
-    });
-
-    Promise.all(lintPromises).then(() => {
-        io.emit('linter-output', { log: '\n--- Linting complete for all applications. ---' });
-    });
-
-    res.json({ message: 'Linting process started for all applications.' });
-});
-
 server.listen(port, () => {
   console.log(`Backend server listening on http://localhost:${port}`);
 });

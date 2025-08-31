@@ -449,53 +449,6 @@ const DetailsTab: React.FC<{ appDetails: AppDetails | null }> = ({ appDetails })
   );
 };
 
-// --- Dependencies Tab Component (Unchanged) ---
-const DependenciesTab: React.FC<{ appName: string; }> = ({ appName }) => {
-  const [dependencies, setDependencies] = useState<any[]>([]);
-  const [newDep, setNewDep] = useState('');
-  const outdatedCount = dependencies.filter(dep => dep.outdated).length;
-  return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center gap-4"><Button variant="outline" className="border-action-primary text-action-primary hover:bg-action-primary/10"><RefreshCw className="w-4 h-4 mr-2" />Check for Updates</Button>{outdatedCount > 0 && (<Button className="bg-action-success hover:bg-action-success/80"><ArrowUpCircle className="w-4 h-4 mr-2" />Update All Outdated ({outdatedCount})</Button>)}</div>
-      <Card className="bg-dashboard-panel border-dashboard-border"><div className="p-4"><h3 className="font-semibold text-dashboard-text mb-4">Add New Dependency</h3><div className="flex gap-2"><Input value={newDep} onChange={(e) => setNewDep(e.target.value)} placeholder="Package name (e.g., lodash)" className="bg-dashboard-bg border-dashboard-border text-dashboard-text" /><Button className="bg-action-primary hover:bg-action-primary/80"><Plus className="w-4 h-4 mr-2" />Add</Button></div></div></Card>
-      <Card className="bg-dashboard-panel border-dashboard-border"><div className="p-4"><h3 className="font-semibold text-dashboard-text mb-4">Dependencies ({dependencies.length})</h3><div className="space-y-2">{dependencies.map((dep) => (<div key={dep.name} className="flex items-center justify-between p-3 rounded-lg border border-dashboard-border"><div className="flex items-center gap-3"><span className="font-medium text-dashboard-text">{dep.name}</span><Badge variant="outline" className="text-dashboard-muted">{dep.version}</Badge>{dep.outdated && (<Badge className="bg-status-starting/20 text-status-starting border-status-starting">Update available: {dep.latest}</Badge>)}</div>{dep.outdated && (<Button size="sm" variant="outline" className="border-action-success text-action-success hover:bg-action-success/10">Update</Button>)}</div>))}</div></div></Card>
-    </div>
-  );
-};
-
-// --- Linter Tab Component ---
-const LinterTab: React.FC<{ linterOutput: string[] }> = ({ linterOutput }) => {
-    const terminalRef = useRef<HTMLDivElement>(null);
-    const ansiToHtml = new AnsiToHtml();
-    useEffect(() => {
-        if (terminalRef.current) {
-            terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-        }
-    }, [linterOutput]);
-
-    return (
-        <div className="p-6 space-y-4">
-            <div className="terminal-window">
-                <div className="bg-dashboard-border p-2 rounded-t-md">
-                    <div className="flex items-center gap-2">
-                        <div className="flex gap-1"><div className="w-3 h-3 rounded-full bg-status-error"></div><div className="w-3 h-3 rounded-full bg-status-starting"></div><div className="w-3 h-3 rounded-full bg-status-running"></div></div>
-                        <span className="text-sm text-dashboard-muted">Linter Output</span>
-                    </div>
-                </div>
-                <div ref={terminalRef} className="terminal-content h-[calc(100vh-20rem)]">
-                    {linterOutput.length === 0 ? (
-                        <div className="text-dashboard-muted">No linter output available.<br />Run the linter to see the results.</div>
-                    ) : (
-                        linterOutput.map((log, index) => (
-                            <div key={index} dangerouslySetInnerHTML={{ __html: ansiToHtml.toHtml(log) }} />
-                        ))
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
 // --- Network Tab Component ---
 const NetworkTab: React.FC<{ requests: any[] }> = ({ requests }) => {
     return (
@@ -533,7 +486,6 @@ const Index: React.FC = () => {
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, string[]>>({});
   const [networkRequests, setNetworkRequests] = useState<Record<string, any[]>>({});
-  const [linterOutput, setLinterOutput] = useState<string[]>([]);
   const [appUrls, setAppUrls] = useState<Record<string, string>>({});
   const [appDetails, setAppDetails] = useState<Record<string, AppDetails>>({});
   const [activeTab, setActiveTab] = useState('terminal');
@@ -595,7 +547,6 @@ const Index: React.FC = () => {
     };
     
     socket.on('logs', ({ appName, log }) => setLogs(prev => ({ ...prev, [appName]: [...(prev[appName] || []), log] })));
-    socket.on('linter-output', ({ log }) => setLinterOutput(prev => [...prev, log]));
     socket.on('app-url', ({ appName, url }) => setAppUrls(prev => ({ ...prev, [appName]: url })));
     socket.on('app-starting', ({ appName }) => handleStatusChange(appName, 'starting'));
     socket.on('app-running', ({ appName }) => handleStatusChange(appName, 'running'));
@@ -700,18 +651,6 @@ const Index: React.FC = () => {
     }
   };
 
-  const runLinter = async () => {
-    setLinterOutput([]);
-    setActiveTab('linter');
-    toast({ title: 'Linter Started', description: 'Running linter for all applications...' });
-    try {
-        const response = await fetch('http://localhost:2999/api/apps/lint/all', { method: 'POST' });
-        if (!response.ok) throw new Error('Failed to start linter on the server.');
-    } catch (error) {
-        toast({ title: 'Error Running Linter', description: (error as Error).message, variant: 'destructive' });
-    }
-  };
-
   const clearLogs = () => { if (selectedApp) setLogs(prev => ({ ...prev, [selectedApp]: [] })); };
   const copyLogs = () => {
     if (selectedApp && logs[selectedApp]) {
@@ -739,22 +678,18 @@ const Index: React.FC = () => {
           <div className="p-6 flex-1">
             <div className="mb-6"><h1 className="text-2xl font-bold text-dashboard-text">{selectedApp}</h1><p className="text-dashboard-muted">Manage and monitor your application</p></div>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
-              <TabsList className="grid w-full grid-cols-5 bg-dashboard-panel border border-dashboard-border">
+              <TabsList className="grid w-full grid-cols-3 bg-dashboard-panel border border-dashboard-border">
                 <TabsTrigger value="terminal" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Terminal</TabsTrigger>
                 <TabsTrigger value="network" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Network</TabsTrigger>
                 <TabsTrigger value="details" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Details</TabsTrigger>
-                <TabsTrigger value="dependencies" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Dependencies</TabsTrigger>
-                <TabsTrigger value="linter" className="data-[state=active]:bg-action-primary data-[state=active]:text-white">Linter</TabsTrigger>
               </TabsList>
               <TabsContent value="terminal"><TerminalTab appName={selectedApp} appStatus={currentApp.status} logs={logs[selectedApp] || []} appUrl={appUrls[selectedApp]} onStartApp={() => startApp(selectedApp)} onStopApp={() => stopApp(selectedApp)} onRestartApp={() => restartApp(selectedApp)} onClearLogs={clearLogs} onCopyLogs={copyLogs} /></TabsContent>
               <TabsContent value="network"><NetworkTab requests={networkRequests[selectedApp] || []} /></TabsContent>
               <TabsContent value="details"><DetailsTab appDetails={appDetails[selectedApp]} /></TabsContent>
-              <TabsContent value="dependencies"><DependenciesTab appName={selectedApp} /></TabsContent>
-              <TabsContent value="linter"><LinterTab linterOutput={linterOutput} /></TabsContent>
             </Tabs>
           </div>
         ) : (
-          <DashboardOverview apps={apps} onStartApp={startApp} onStopApp={stopApp} onSelectApp={setSelectedApp} onRunLinter={runLinter} />
+          <DashboardOverview apps={apps} onStartApp={startApp} onStopApp={stopApp} onSelectApp={setSelectedApp} />
         )}
       </div>
     </div>

@@ -1,8 +1,8 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PlayCircle, StopCircle, HardHat, RefreshCw } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PlayCircle, StopCircle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 // --- Types ---
 interface App {
@@ -65,7 +65,7 @@ export const DashboardOverview: React.FC<{
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <Card className="lg:col-span-2 bg-dashboard-panel border-dashboard-border">
+                <Card className="lg:col-span-3 bg-dashboard-panel border-dashboard-border">
                     <CardHeader>
                         <CardTitle>Application Status</CardTitle>
                     </CardHeader>
@@ -79,16 +79,6 @@ export const DashboardOverview: React.FC<{
                                 <Bar dataKey="count" fill="fill" />
                             </BarChart>
                         </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-dashboard-panel border-dashboard-border">
-                    <CardHeader>
-                        <CardTitle>Quick Actions</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <Button className="w-full justify-start" variant="outline"><HardHat className="w-4 h-4 mr-2" /> Run Linter on All Apps</Button>
-                        <Button className="w-full justify-start" variant="outline"><RefreshCw className="w-4 h-4 mr-2" /> Check Outdated Dependencies</Button>
                     </CardContent>
                 </Card>
             </div>
