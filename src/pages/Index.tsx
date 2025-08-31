@@ -54,6 +54,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
+import { ModeToggle } from '@/components/mode-toggle';
 
 // --- Types ---
 interface App {
@@ -242,7 +243,10 @@ const AppSidebar: React.FC<{
             <h2 className="text-lg font-semibold text-dashboard-text mb-1">Applications</h2>
             <p className="text-sm text-dashboard-muted">{apps.length} apps in monorepo</p>
         </div>
-        <AddAppDialog onAppAdded={onAppAdded} />
+        <div className="flex items-center gap-2">
+            <ModeToggle />
+            <AddAppDialog onAppAdded={onAppAdded} />
+        </div>
       </div>
       
       <div className="space-y-2 flex-1 overflow-y-auto">
@@ -517,10 +521,6 @@ const Index: React.FC = () => {
         });
     });
 
-    socket.on('installation-complete', ({ appName, success }) => {
-        setApps(prev => prev.map(app => app.name === appName ? { ...app, status: success ? 'stopped' : 'error', isInstalled: success } : app));
-    });
-
     return () => {
       socket.disconnect();
     };
@@ -596,6 +596,8 @@ const Index: React.FC = () => {
         toast({ title: 'Installation Successful', description: `Dependencies for ${appName} are installed.` });
     } catch (error) {
         toast({ title: 'Installation Failed', description: (error as Error).message, variant: 'destructive' });
+    } finally {
+        fetchApps(); // Refresh app list to show new status
     }
   };
 
